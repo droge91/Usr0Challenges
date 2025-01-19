@@ -3,10 +3,6 @@ import discord
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson.objectid import ObjectId
-import aiohttp
-import io
-
-
 #Requires a .env
 try:
     load_dotenv()
@@ -76,6 +72,9 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 
+catSlang = {"Open Source Intelligence" : "OSI"}
+
+
 @bot.command(description="Start the bot")
 async def start(ctx):
     activeChallenges = challenges.find({"active": True})
@@ -83,28 +82,16 @@ async def start(ctx):
         await ctx.response.send_message("No active challenges", ephemeral=True)
         return
     await ctx.channel.purge()
-    async with aiohttp.ClientSession() as session:
-        for currChallenge in activeChallenges:
-            try:
-                links = currChallenge['links']
-            except KeyError:
-                links = []
-            files = []
-            for link in links:
-                async with session.get(link) as resp:
-                    if resp.status == 200:
-                        file = await resp.read()
-                        file_name = link.split("/")[-1]
-                        file_name = file_name.split("?")[0]
-                        discord_file = discord.File(io.BytesIO(file), filename=file_name)
-                        print(f"Added {file_name} to the files list")
-                        files.append(discord_file)
-                    else:
-                        print(f"Failed to get {link}")
-
-            embed = assembleEmbed(currChallenge)
-            view = ButtonView(timeout=None, challenge=currChallenge)
-            await ctx.send(embed=embed, files=files, view=view)
+    for currChallenge in activeChallenges:
+        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
+        files = []
+        title = currChallenge['title'].replace(" ", "_")
+        for file in os.listdir(f"{category}/{title}"):
+            if not (file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg")):
+                files.append(discord.File(f"{category}/{title}/{file}"))
+        embed = assembleEmbed(currChallenge)
+        view = ButtonView(timeout=None, challenge=currChallenge)
+        await ctx.send(embed=embed, files=files, view=view)
     await ctx.response.send_message("Challenges have been sent", ephemeral=True)
 
 def assembleEmbed(challenge):
@@ -118,6 +105,7 @@ def assembleEmbed(challenge):
     embed.set_thumbnail(url=challenge['categoryIcon'])
     if challenge['image'] != "":
         embed.set_image(url=challenge['image'])
+        print(challenge['image'])
     return embed
 
 @bot.command(description="Show the current Standings")
