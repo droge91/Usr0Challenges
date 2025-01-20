@@ -75,6 +75,55 @@ async def on_ready():
 catSlang = {"Open Source Intelligence" : "OSI"}
 
 
+
+class Paginator(discord.ui.View):
+    def __init__(self, embeds, files, **kwargs):
+        self.challenge = kwargs.pop("challenge")
+        super().__init__(timeout=None)  # You can set a timeout if desired
+        self.embeds = embeds
+        self.files = files
+        self.current_page = 0
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple)
+    async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        """Go to the previous page."""
+        # Decrement page index if possible
+        if self.current_page > 0:
+            self.current_page -= 1
+            await self.update_message(interaction)
+            if self.current_page == 0:
+                print("First page")
+                button.disabled = True
+            await interaction.response.defer()
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
+    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        """Go to the next page."""
+        # Increment page index if possible
+        if self.current_page < len(self.embeds) - 1:
+            self.current_page += 1
+            await self.update_message(interaction)
+            # Optionally disable the button or show a warning if on the last page
+            if self.current_page == len(self.embeds) - 1:
+                print("Last page")
+                button.disabled = True
+            await interaction.response.defer()
+
+    async def update_message(self, interaction: discord.Interaction):
+        """Deletes and re-sends the message with updated content."""
+        # Delete the existing message
+        if self.message:
+            await self.message.delete()
+        # Send a new message and store it
+        self.message = await interaction.channel.send(
+            embed=self.embeds[self.current_page],
+            files=fileListAssembler(self.files[self.current_page]) if self.files else None,
+            view=self
+        )
+    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
+    async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge))
+
 @bot.command(description="Start the bot")
 async def start(ctx):
     activeChallenges = challenges.find({"active": True})
@@ -82,30 +131,39 @@ async def start(ctx):
         await ctx.response.send_message("No active challenges", ephemeral=True)
         return
     await ctx.channel.purge()
-    for currChallenge in activeChallenges:
+    embeds = []
+    files = []
+    views = []
+    for i, currChallenge in enumerate(activeChallenges):
         category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
-        files = []
         title = currChallenge['title'].replace(" ", "_")
+        files.append([])
         for file in os.listdir(f"{category}/{title}"):
-            if not (file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg")):
-                files.append(discord.File(f"{category}/{title}/{file}"))
-        embed = assembleEmbed(currChallenge)
-        view = ButtonView(timeout=None, challenge=currChallenge)
-        await ctx.send(embed=embed, files=files, view=view)
-    await ctx.response.send_message("Challenges have been sent", ephemeral=True)
+            if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
+                currChallenge['image'] = f"{category}/{title}/{file}"
+            files[i].append(f"{category}/{title}/{file}")
+        embed = assembleEmbed(currChallenge, i+1, activeChallenges.collection.count_documents({"active": True}))
+        views.append(Paginator(embeds, files, challenge=currChallenge))
+        embeds.append(embed)
 
-def assembleEmbed(challenge):
+
+    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(files[0]))
+
+
+def fileListAssembler(files):
+    return list(discord.File(file) for file in files)
+
+def assembleEmbed(challenge, iter,tot):
     embed = discord.Embed(
-        title=challenge['title'],
+        title=f"{challenge['title']} - {challenge['points']} points",
         description=challenge['desc'],
         color=discord.Colour.blurple(),
     )
 
-    embed.set_author(name= challenge['category'])
+    embed.set_author(name= f"{challenge['category']}        {iter}/{tot}")
     embed.set_thumbnail(url=challenge['categoryIcon'])
     if challenge['image'] != "":
-        embed.set_image(url=challenge['image'])
-        print(challenge['image'])
+        embed.set_image(url=f"attachment://{challenge['image'].split('/')[-1]}")
     return embed
 
 @bot.command(description="Show the current Standings")
