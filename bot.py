@@ -79,42 +79,39 @@ catSlang = {"Open Source Intelligence" : "OSI"}
 class Paginator(discord.ui.View):
     def __init__(self, embeds, files, **kwargs):
         self.challenge = kwargs.pop("challenge")
-        super().__init__(timeout=None)  # You can set a timeout if desired
+        super().__init__(timeout=None)
         self.embeds = embeds
         self.files = files
         self.current_page = 0
 
-    @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple)
+        self.previous_page.disabled = True if self.current_page == 0 else False
+        self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple, disabled=True)
     async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
         """Go to the previous page."""
-        # Decrement page index if possible
+        #Decrement page index if possible
         if self.current_page > 0:
             self.current_page -= 1
             await self.update_message(interaction)
-            if self.current_page == 0:
-                print("First page")
-                button.disabled = True
-            await interaction.response.defer()
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
     async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
         """Go to the next page."""
-        # Increment page index if possible
+        #Increment page index if possible
         if self.current_page < len(self.embeds) - 1:
             self.current_page += 1
             await self.update_message(interaction)
-            # Optionally disable the button or show a warning if on the last page
-            if self.current_page == len(self.embeds) - 1:
-                print("Last page")
-                button.disabled = True
-            await interaction.response.defer()
 
     async def update_message(self, interaction: discord.Interaction):
         """Deletes and re-sends the message with updated content."""
         # Delete the existing message
+
+        self.previous_page.disabled = True if self.current_page == 0 else False
+        self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
+
         if self.message:
             await self.message.delete()
-        # Send a new message and store it
         self.message = await interaction.channel.send(
             embed=self.embeds[self.current_page],
             files=fileListAssembler(self.files[self.current_page]) if self.files else None,
@@ -131,7 +128,7 @@ async def start(ctx):
         await ctx.response.send_message("No active challenges", ephemeral=True)
         return
     await ctx.channel.purge()
-    embeds = []
+    embeds = [None] * activeChallenges.collection.count_documents({"active": True})
     files = []
     views = []
     for i, currChallenge in enumerate(activeChallenges):
@@ -143,9 +140,9 @@ async def start(ctx):
                 currChallenge['image'] = f"{category}/{title}/{file}"
             files[i].append(f"{category}/{title}/{file}")
         embed = assembleEmbed(currChallenge, i+1, activeChallenges.collection.count_documents({"active": True}))
+        embeds[i] = embed
         views.append(Paginator(embeds, files, challenge=currChallenge))
-        embeds.append(embed)
-
+        
 
     await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(files[0]))
 
