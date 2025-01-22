@@ -39,7 +39,7 @@ A Discord bot that allows users to participate in and submit answers for various
 3. A [MongoDB](https://www.mongodb.com/) database or MongoDB Atlas connection URI.
 4. A Discord Bot Token from the [Discord Developer Portal](https://discord.com/developers/applications).
 
-The MongoDB URI and Discord Token should be provided by a .env
+    The MongoDB URI and Discord Token should be provided by a .env
 ---
 
 ## Installation
