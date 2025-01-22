@@ -66,7 +66,6 @@ class ButtonView(discord.ui.View):
 
 
 
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
@@ -142,7 +141,7 @@ async def start(ctx):
         embed = assembleEmbed(currChallenge, i+1, activeChallenges.collection.count_documents({"active": True}))
         embeds[i] = embed
         views.append(Paginator(embeds, files, challenge=currChallenge))
-        
+
 
     await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(files[0]))
 
