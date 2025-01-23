@@ -109,9 +109,8 @@ class Paginator(discord.ui.View):
         self.previous_page.disabled = True if self.current_page == 0 else False
         self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
 
-        if self.message:
-            await self.message.delete()
-        self.message = await interaction.channel.send(
+
+        self.message = await interaction.response.edit_message(
             embed=self.embeds[self.current_page],
             files=fileListAssembler(self.files[self.current_page]) if self.files else None,
             view=self
@@ -128,31 +127,36 @@ async def start(ctx):
         return
     await ctx.channel.purge()
     embeds = [None] * activeChallenges.collection.count_documents({"active": True})
-    files = []
+    Images = []
     views = []
     for i, currChallenge in enumerate(activeChallenges):
         category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
         title = currChallenge['title'].replace(" ", "_")
-        files.append([])
+        Images.append([])
+        fileLinks = []
         for file in os.listdir(f"{category}/{title}"):
             if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
                 currChallenge['image'] = f"{category}/{title}/{file}"
-            files[i].append(f"{category}/{title}/{file}")
-        embed = assembleEmbed(currChallenge, i+1, activeChallenges.collection.count_documents({"active": True}))
+                Images[i].append(f"{category}/{title}/{file}")
+            else:
+                fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
+        embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
         embeds[i] = embed
-        views.append(Paginator(embeds, files, challenge=currChallenge))
+        views.append(Paginator(embeds, Images, challenge=currChallenge))
 
 
-    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(files[0]))
+    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
 
 
 def fileListAssembler(files):
     return list(discord.File(file) for file in files)
 
-def assembleEmbed(challenge, iter,tot):
+def assembleEmbed(challenge, fileLinks, iter,tot):
+    hyperlinks = "\n".join([f"[{file.split('/')[-1].split('?')[0]}]({file})" for file in fileLinks])
+
     embed = discord.Embed(
         title=f"{challenge['title']} - {challenge['points']} points",
-        description=challenge['desc'],
+        description=challenge['desc'] + f"\n{hyperlinks}",
         color=discord.Colour.blurple(),
     )
 
