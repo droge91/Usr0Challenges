@@ -74,7 +74,7 @@ A Discord bot that allows users to participate in and submit answers for various
 ### Slash Commands
 
 - **`/start`**  
-  Purges the submissions channel and posts interactive embeds for **active** challenges. Users can navigate between challenges with "Previous" and "Next," then submit their answers.
+  Posts an interactive embed for **active** challenges. Users can navigate between challenges with "Previous" and "Next," then submit their answers.
 
 - **`/standings`**  
   Shows the top 5 users by points and also displays your own points if you're not in the top 5.
@@ -127,7 +127,7 @@ Ensure that your challenges folder is named the same as what is described in the
 
 - **OSI/**, **other_category/**, etc.:  
   Each category folder holds subfolders for each challenge (`challenge_one`, `challenge_two`, etc.), which contain images or files needed for that challenge.
-  Images will be included in the embed while other filetypes will be added as download links above it.
+  Images will be included in the embed while other filetypes will be included in the embed as hyperlinks.
 
 ---
 
@@ -154,7 +154,8 @@ Ensure that your challenges folder is named the same as what is described in the
     "desc": "Challenge Description",
     "points": 100,
     "solves": 0,
-    "answer": "Flag{example}",
+    "questions": "[question1, question2]",
+    "answers": "[answer1, answer2]",
     "active": true,
     "category": "Open Source Intelligence",
     "categoryIcon": "https://link_to_icon.png",
