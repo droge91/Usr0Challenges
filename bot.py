@@ -26,23 +26,38 @@ class SubmitField(discord.ui.Modal):
     def __init__(self, *args, **kwargs) -> None:
         self.challenge = kwargs.pop("challenge")
         super().__init__(*args, **kwargs)
-        self.add_item(discord.ui.InputText(label="Answer", placeholder="Enter your answer here"))
+        for question in self.challenge['questions']:
+            try:
+                self.add_item(discord.ui.InputText(label=question, placeholder="Answer"))
+            except Exception as e:
+                print(f"Error adding question: {e}")
+                print(f"Ensure question is 45 characters or less, currently {len(question)}")
 
 
     async def callback(self, interaction: discord.Interaction):
-        submission = self.children[0].value
         currChallenge = self.challenge
         person = users.find_one({"user_id": interaction.user.id})
         if person is not None and currChallenge['challNum'] in person['solves']:
             await interaction.response.send_message("You have already solved this challenge", ephemeral=True)
             return
-        if submission.lower() == currChallenge['answer'].lower():
+        correct = True
+        wrongquestions = []
+        for i in range(len(self.children)):
+            submission = self.children[i].value
+            if submission.lower() != currChallenge['answers'][i].lower():
+                correct = False
+                wrongquestions.append(i+1)
+        if correct:
             points = pointsCalc(person, currChallenge)
             if person is None:
                 users.insert_one({"user_id": interaction.user.id, "points": currChallenge['points'], "solves": [currChallenge['challNum']]})
             else:
-                users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']]}})
+                users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']]}})       
             await interaction.response.send_message(f"Correct Answer! You have been awarded {points} points", ephemeral=True)
+        else:
+            wrongstring = ', '.join([str(i) for i in wrongquestions])
+            await interaction.response.send_message(f"Questions {wrongstring} are incorrect", ephemeral=True)
+            
 
 #Function to calculate the points received
 def pointsCalc(person, currChallenge):
@@ -51,18 +66,6 @@ def pointsCalc(person, currChallenge):
     if points < 10:
         points = 10
     return points
-
-
-#Class defining the Submission Button
-class ButtonView(discord.ui.View):
-    def __init__(self, *args, **kwargs) -> None:
-        self.challenge = kwargs.pop("challenge")
-        super().__init__(*args, **kwargs)
-
-
-    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
-    async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
-        await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge))
 
 
 
@@ -76,12 +79,13 @@ catSlang = {"Open Source Intelligence" : "OSI"}
 
 
 class Paginator(discord.ui.View):
-    def __init__(self, embeds, files, **kwargs):
+    def __init__(self, **kwargs):
         self.challenge = kwargs.pop("challenge")
         super().__init__(timeout=None)
-        self.embeds = embeds
-        self.files = files
+        self.embeds = kwargs.pop("embeds")
+        self.files = kwargs.pop("files")
         self.current_page = 0
+        self.views = kwargs.pop("views")
 
         self.previous_page.disabled = True if self.current_page == 0 else False
         self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
@@ -113,7 +117,7 @@ class Paginator(discord.ui.View):
         self.message = await interaction.response.edit_message(
             embed=self.embeds[self.current_page],
             files=fileListAssembler(self.files[self.current_page]) if self.files else None,
-            view=self
+            view=self.views[self.current_page]
         )
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -142,7 +146,7 @@ async def start(ctx):
                 fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
         embeds[i] = embed
-        views.append(Paginator(embeds, Images, challenge=currChallenge))
+        views.append(Paginator(embeds = embeds, files = Images, views = views, challenge=currChallenge))
 
 
     await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
