@@ -50,9 +50,9 @@ class SubmitField(discord.ui.Modal):
         if correct:
             points = pointsCalc(person, currChallenge)
             if person is None:
-                users.insert_one({"user_id": interaction.user.id, "points": currChallenge['points'], "solves": [currChallenge['challNum']]})
+                users.insert_one({"user_id": interaction.user.id, "points": currChallenge['points'], "solves": [currChallenge['challNum']], "attempts": 1})
             else:
-                users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']]}})       
+                users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']], "attempts": person['attempts'] + 1}})       
             await interaction.response.send_message(f"Correct Answer! You have been awarded {points} points", ephemeral=True)
         else:
             wrongstring = ', '.join([str(i) for i in wrongquestions])
@@ -84,7 +84,7 @@ class Paginator(discord.ui.View):
         super().__init__(timeout=None)
         self.embeds = kwargs.pop("embeds")
         self.files = kwargs.pop("files")
-        self.current_page = 0
+        self.current_page = kwargs.pop("current_page")
         self.views = kwargs.pop("views")
 
         self.previous_page.disabled = True if self.current_page == 0 else False
@@ -93,39 +93,28 @@ class Paginator(discord.ui.View):
     @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple, disabled=True)
     async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
         """Go to the previous page."""
-        #Decrement page index if possible
-        if self.current_page > 0:
-            self.current_page -= 1
-            await self.update_message(interaction)
+        self.message = await interaction.response.edit_message(
+            embed=self.embeds[self.current_page - 1],
+            files=fileListAssembler(self.files[self.current_page - 1]) if self.files else None,
+            view=self.views[self.current_page - 1]
+        )
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
     async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
         """Go to the next page."""
-        #Increment page index if possible
-        if self.current_page < len(self.embeds) - 1:
-            self.current_page += 1
-            await self.update_message(interaction)
-
-    async def update_message(self, interaction: discord.Interaction):
-        """Deletes and re-sends the message with updated content."""
-        # Delete the existing message
-
-        self.previous_page.disabled = True if self.current_page == 0 else False
-        self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
-
-
         self.message = await interaction.response.edit_message(
-            embed=self.embeds[self.current_page],
-            files=fileListAssembler(self.files[self.current_page]) if self.files else None,
-            view=self.views[self.current_page]
+            embed=self.embeds[self.current_page + 1],
+            files=fileListAssembler(self.files[self.current_page + 1]) if self.files else None,
+            view=self.views[self.current_page + 1]
         )
+
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge))
 
 @bot.command(description="Start the bot")
 async def start(ctx):
-    activeChallenges = challenges.find({"active": True})
+    activeChallenges = (challenges.find({"active": True})).sort("points", 1)
     if activeChallenges is None:
         await ctx.response.send_message("No active challenges", ephemeral=True)
         return
@@ -146,7 +135,7 @@ async def start(ctx):
                 fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
         embeds[i] = embed
-        views.append(Paginator(embeds = embeds, files = Images, views = views, challenge=currChallenge))
+        views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge))
 
 
     await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
@@ -157,10 +146,11 @@ def fileListAssembler(files):
 
 def assembleEmbed(challenge, fileLinks, iter,tot):
     hyperlinks = "\n".join([f"[{file.split('/')[-1].split('?')[0]}]({file})" for file in fileLinks])
+    questions = "\n".join([f"{i+1}. {question}" for i, question in enumerate(challenge['questions'])])
 
     embed = discord.Embed(
         title=f"{challenge['title']} - {challenge['points']} points",
-        description=challenge['desc'] + f"\n{hyperlinks}",
+        description=challenge['desc'] + f"\n{hyperlinks}" + f"\n\n{questions}",
         color=discord.Colour.blurple(),
     )
 
@@ -173,7 +163,12 @@ def assembleEmbed(challenge, fileLinks, iter,tot):
 @bot.command(description="Show the current Standings")
 async def standings(ctx):
     embed = discord.Embed(title="Standings", color=0x00ff00)
-    top5 = users.find().sort("points", -1).limit(5)
+    top5 = users.find().sort([("points", -1), ("attempst", 1)]).limit(5)
+
+    user = users.find_one({"user_id": ctx.author.id})
+    if user is None:
+        user = {"user_id": ctx.author.id, "points": 0, "solves": [], "attempts": 0}
+        users.insert_one(user)
 
     leaderboard = ""
     top_5_ids = []
@@ -185,7 +180,7 @@ async def standings(ctx):
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
     if ctx.author.id not in top_5_ids:
         name = ctx.guild.get_member(ctx.author.id).name if ctx.guild.get_member(ctx.author.id) else "Unknown"
-        userplace = f"{name} - {users.find_one({'user_id': ctx.author.id})['points']} points"
+        userplace = f"{name} - {user['points']} points"
         embed.add_field(name="Your Current Placement", value=userplace, inline=True)
     await ctx.response.send_message(embed=embed, ephemeral=True)
 
