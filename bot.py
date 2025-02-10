@@ -56,7 +56,10 @@ class SubmitField(discord.ui.Modal):
             await interaction.response.send_message(f"Correct Answer! You have been awarded {points} points", ephemeral=True)
         else:
             wrongstring = ', '.join([str(i) for i in wrongquestions])
-            await interaction.response.send_message(f"Questions {wrongstring} are incorrect", ephemeral=True)
+            if wrongquestions == 1:
+                await interaction.response.send_message(f"Question {wrongstring} is incorrect", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Questions {wrongstring} are incorrect", ephemeral=True)
             
 
 #Function to calculate the points received
@@ -118,7 +121,6 @@ async def start(ctx):
     if activeChallenges is None:
         await ctx.response.send_message("No active challenges", ephemeral=True)
         return
-    await ctx.channel.purge()
     embeds = [None] * activeChallenges.collection.count_documents({"active": True})
     Images = []
     views = []
@@ -133,6 +135,8 @@ async def start(ctx):
                 Images[i].append(f"{category}/{title}/{file}")
             else:
                 fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
+        if 'image' not in currChallenge:
+            currChallenge['image'] = ""
         embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
         embeds[i] = embed
         views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge))
