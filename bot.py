@@ -133,7 +133,7 @@ async def start(ctx):
             if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
                 currChallenge['image'] = f"{category}/{title}/{file}"
                 Images[i].append(f"{category}/{title}/{file}")
-            else:
+            elif not file.endswith(".keep"):
                 fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         if 'image' not in currChallenge:
             currChallenge['image'] = ""
