@@ -50,7 +50,7 @@ class SubmitField(discord.ui.Modal):
         if correct:
             points = pointsCalc(person, currChallenge)
             if person is None:
-                users.insert_one({"user_id": interaction.user.id, "points": currChallenge['points'], "solves": [currChallenge['challNum']], "attempts": 1})
+                users.insert_one({"user_id": interaction.user.id, "points": points, "solves": [currChallenge['challNum']], "attempts": 1})
             else:
                 users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']], "attempts": person['attempts'] + 1}})       
             await interaction.response.send_message(f"Correct Answer! You have been awarded {points} points", ephemeral=True)
