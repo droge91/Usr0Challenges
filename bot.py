@@ -64,8 +64,13 @@ class SubmitField(discord.ui.Modal):
 
 #Function to calculate the points received
 def pointsCalc(person, currChallenge):
-    points = int(currChallenge['points']) - int(currChallenge['solves']) * 5
-    challenges.update_one({"title": currChallenge['title']}, {"$set": {"solves": currChallenge['solves'] + 1}})
+    updated_challenge = challenges.find_one_and_update(
+        {"title": currChallenge['title']},
+        {'$inc': {'solves': 1}},
+        return_document=True 
+)
+    points = int(updated_challenge['points']) - int(updated_challenge['solves'] - 1) * 5
+
     if points < 10:
         points = 10
     return points
