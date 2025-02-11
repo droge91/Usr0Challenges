@@ -182,13 +182,16 @@ async def standings(ctx):
     leaderboard = ""
     top_5_ids = []
     for i, person in enumerate(top5):
-        name = ctx.guild.get_member(person['user_id']).name if ctx.guild.get_member(person['user_id']) else "Unknown"
+        member = ctx.guild.get_member(person['user_id']) or await ctx.guild.fetch_member(person['user_id'])
+        name = member.name if member else "Unknown"
         leaderboard += f"{i+1}. {name} - {person['points']} points\n"
         top_5_ids.append(person['user_id'])
 
     embed.add_field(name="Leaderboard", value=leaderboard, inline=False)
     if ctx.author.id not in top_5_ids:
-        name = ctx.guild.get_member(ctx.author.id).name if ctx.guild.get_member(ctx.author.id) else "Unknown"
+        member = ctx.guild.get_member(ctx.author.id) or await ctx.guild.fetch_member(ctx.author.id)
+        name = member.name if member else "Unknown"
+        
         userplace = f"{name} - {user['points']} points"
         embed.add_field(name="Your Current Placement", value=userplace, inline=True)
     await ctx.response.send_message(embed=embed, ephemeral=True)
