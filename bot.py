@@ -27,11 +27,11 @@ class SubmitField(discord.ui.Modal):
         self.challenge = kwargs.pop("challenge")
         super().__init__(*args, **kwargs)
         for question in self.challenge['questions']:
+            #Necessary due to hard limit on the length of the label
             try:
                 self.add_item(discord.ui.InputText(label=question, placeholder="Answer"))
             except Exception as e:
-                print(f"Error adding question: {e}")
-                print(f"Ensure question is 45 characters or less, currently {len(question)}")
+                self.add_item(discord.ui.InputText(label=question[:42] + '...', placeholder="Answer"))
 
 
     async def callback(self, interaction: discord.Interaction):
@@ -120,6 +120,38 @@ class Paginator(discord.ui.View):
     async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
         await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge))
 
+
+
+@bot.command(description="Test the bot")
+async def test(ctx):
+    activeChallenges = (challenges.find({"Testactive": True})).sort("points", 1)
+    if activeChallenges is None:
+        await ctx.response.send_message("No active challenges", ephemeral=True)
+        return
+    embeds = [None] * activeChallenges.collection.count_documents({"Testactive": True})
+    Images = []
+    views = []
+    for i, currChallenge in enumerate(activeChallenges):
+        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
+        title = currChallenge['title'].replace(" ", "_")
+        Images.append([])
+        fileLinks = []
+        if os.path.exists(f"{category}/{title}"):
+            for file in os.listdir(f"{category}/{title}"):
+                if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
+                    currChallenge['image'] = f"{category}/{title}/{file}"
+                    Images[i].append(f"{category}/{title}/{file}")
+                elif not file.endswith(".keep"):
+                    fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
+        if 'image' not in currChallenge:
+            currChallenge['image'] = ""
+        embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"Testactive": True}))
+        embeds[i] = embed
+        views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge))
+
+
+    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
+
 @bot.command(description="Start the bot")
 async def start(ctx):
     activeChallenges = (challenges.find({"active": True})).sort("points", 1)
@@ -134,12 +166,13 @@ async def start(ctx):
         title = currChallenge['title'].replace(" ", "_")
         Images.append([])
         fileLinks = []
-        for file in os.listdir(f"{category}/{title}"):
-            if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
-                currChallenge['image'] = f"{category}/{title}/{file}"
-                Images[i].append(f"{category}/{title}/{file}")
-            elif not file.endswith(".keep"):
-                fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
+        if os.path.exists(f"{category}/{title}"):
+            for file in os.listdir(f"{category}/{title}"):
+                if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
+                    currChallenge['image'] = f"{category}/{title}/{file}"
+                    Images[i].append(f"{category}/{title}/{file}")
+                elif not file.endswith(".keep"):
+                    fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         if 'image' not in currChallenge:
             currChallenge['image'] = ""
         embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
@@ -220,6 +253,31 @@ class SelectChallengeView(discord.ui.View):
         challenges.update_many({}, {"$set": {"active": False}})
         for challenge in selected:
             challenges.update_one({"_id": ObjectId(challenge)}, {"$set": {"active": True}})
+        await interaction.response.send_message("Challenges have been updated", ephemeral=True)
+
+@bot.command(description="Change which challenges are active for testing")
+async def changetestactive(ctx):
+    global challenges
+    challenges = client['Usr0Comp']['Challenges']
+    await ctx.response.send_message("Select the challenges you want to be Testing active", view=TestSelectChallengeView(), ephemeral=True)
+
+class TestSelectChallengeView(discord.ui.View):
+    @discord.ui.select(
+        placeholder="Select the active challenges",
+        min_values=1,
+        max_values= challenges.count_documents({}),
+        options=
+        [
+            discord.SelectOption(label=doc["title"], value=str(doc["_id"]))
+            for doc in challenges.find()
+        ]
+    )
+
+    async def callback(self, select, interaction: discord.Interaction):
+        selected = select.values
+        challenges.update_many({}, {"$set": {"Testactive": False}})
+        for challenge in selected:
+            challenges.update_one({"_id": ObjectId(challenge)}, {"$set": {"Testactive": True}})
         await interaction.response.send_message("Challenges have been updated", ephemeral=True)
 
 class ModifyChallengeView(discord.ui.View):
