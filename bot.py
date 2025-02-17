@@ -199,6 +199,8 @@ async def standings(ctx):
 
 @bot.command(description="Change which challenges are active")
 async def changeactive(ctx):
+    global challenges
+    challenges = client['Usr0Comp']['Challenges']
     await ctx.response.send_message("Select the challenges you want to be active", view=SelectChallengeView(), ephemeral=True)
 
 class SelectChallengeView(discord.ui.View):
@@ -257,6 +259,8 @@ class ModifyFieldView(discord.ui.Modal):
 
 @bot.command(description="Modify a challenge")
 async def modify(ctx):
+    global challenges
+    challenges = client['Usr0Comp']['Challenges']
     await ctx.response.send_message("Select the challenge you want to modify", view=ModifyChallengeView(), ephemeral=True)
 
 
