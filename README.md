@@ -87,6 +87,11 @@ A Discord bot that allows users to participate in and submit answers for various
 
 - **`/modifyuser <@User>`**  
   Modify a specific user's document in the database (e.g., change points). Selecting a user triggers a modal to update the stored data.
+- **`/test`**
+  Posts the same embed as **`/start`** but for challenges designated as **Testingactive**
+- **`/changetestactive`**
+  The same select as **`/changeactive`** but instead designates challenges as active for testing. For use with **`/test`**
+
 
 ### Submitting an Answer
 1. After running `/start`, you’ll see embeds for each active challenge.
@@ -124,6 +129,7 @@ A typical folder structure might look like this:
 └─ .env
 ```
 Ensure that your challenges folder is named the same as what is described in the MongoDB title field(Replace spaces with underscores)
+**IMPORTANT** Files with spaces in their names will cause issues on the backend when assembling the embed. Avoid using spaces.
 
 - **OSI/**, **other_category/**, etc.:  
   Each category folder holds subfolders for each challenge (`challenge_one`, `challenge_two`, etc.), which contain images or files needed for that challenge.
