@@ -3,6 +3,7 @@ import discord
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+import importlib
 #Requires a .env
 try:
     load_dotenv()
@@ -36,17 +37,30 @@ class SubmitField(discord.ui.Modal):
 
     async def callback(self, interaction: discord.Interaction):
         currChallenge = self.challenge
+        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
+        title = currChallenge['title'].replace(" ", "_")
         person = users.find_one({"user_id": interaction.user.id})
         if person is not None and currChallenge['challNum'] in person['solves']:
             await interaction.response.send_message("You have already solved this challenge", ephemeral=True)
             return
         correct = True
         wrongquestions = []
+        complex = currChallenge.get('Complex_Answer')
         for i in range(len(self.children)):
             submission = self.children[i].value
-            if submission.lower() != currChallenge['answers'][i].lower():
-                correct = False
-                wrongquestions.append(i+1)
+            if complex and currChallenge['Complex_Answer'] == i:
+                if os.path.exists(f"{category}/{title}/validate_{i}.py"):
+                    module = importlib.import_module(f"{category}.{title}.validate_{i}")
+                    validate = module.validate
+                    if not validate(submission):
+                        correct = False
+                        wrongquestions.append(i+1)
+                else:
+                    await interaction.response.send_message("Complex answer but required but not setup properly, contact Officer", ephemeral=True)
+            else:
+                if submission.lower() != currChallenge['answers'][i].lower():
+                    correct = False
+                    wrongquestions.append(i+1)
         if correct:
             points = pointsCalc(person, currChallenge)
             if person is None:
@@ -62,7 +76,6 @@ class SubmitField(discord.ui.Modal):
                 await interaction.response.send_message(f"Questions {wrongstring} are incorrect", ephemeral=True)
             
 
-#Function to calculate the points received
 def pointsCalc(person, currChallenge):
     updated_challenge = challenges.find_one_and_update(
         {"title": currChallenge['title']},
@@ -82,7 +95,7 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 
-catSlang = {"Open Source Intelligence" : "OSI"}
+catSlang = {"Open Source Intelligence" : "OSI", "Enumeration & Exploitation" : "E&E"}
 
 
 
@@ -141,7 +154,7 @@ async def test(ctx):
                 if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
                     currChallenge['image'] = f"{category}/{title}/{file}"
                     Images[i].append(f"{category}/{title}/{file}")
-                elif not file.endswith(".keep"):
+                elif not file.endswith(".py"):
                     fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         if 'image' not in currChallenge:
             currChallenge['image'] = ""
@@ -171,7 +184,7 @@ async def start(ctx):
                 if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
                     currChallenge['image'] = f"{category}/{title}/{file}"
                     Images[i].append(f"{category}/{title}/{file}")
-                elif not file.endswith(".keep"):
+                elif not file.endswith(".py"):
                     fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
         if 'image' not in currChallenge:
             currChallenge['image'] = ""
