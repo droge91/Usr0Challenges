@@ -56,7 +56,7 @@ class SubmitField(discord.ui.Modal):
                         correct = False
                         wrongquestions.append(i+1)
                 else:
-                    await interaction.response.send_message("Complex answer but required but not setup properly, contact Officer", ephemeral=True)
+                    await interaction.response.send_message("Complex answer required but not setup properly, contact Officer", ephemeral=True)
             else:
                 if submission.lower() != currChallenge['answers'][i].lower():
                     correct = False
@@ -155,7 +155,7 @@ async def test(ctx):
                     currChallenge['image'] = f"{category}/{title}/{file}"
                     Images[i].append(f"{category}/{title}/{file}")
                 elif not file.endswith(".py"):
-                    fileLinks.append(f"https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true")
+                    fileLinks.append(f"<https://github.com/droge91/Usr0Challenges/blob/main/{category}/{title}/{file}?raw=true>")
         if 'image' not in currChallenge:
             currChallenge['image'] = ""
         embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"Testactive": True}))
