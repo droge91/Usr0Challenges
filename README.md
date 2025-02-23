@@ -166,9 +166,18 @@ Ensure that your challenges folder is named the same as what is described in the
     "category": "Open Source Intelligence",
     "categoryIcon": "https://link_to_icon.png",
     "image": "",
-    ...
+    "Complex_Answer": 1
   }
   ```
+### Complex Answers
+
+Some challenges require a **Complex Answer** that needs additional validation beyond string comparison. These are indicated by the `Complex_Answer` field in the challenge document.
+
+- If `Complex_Answer` is set, the bot attempts to run a validation script from the challenge's directory (e.g., `validate_X.py` where X is the question number).
+- The validation script should include a `validate()` function that returns `True` for correct answers and `False` otherwise.
+- If no validation script is found, the bot notifies the user to contact an administrator.
+
+  
 
 ### Points Calculation
 When a user submits the correct answer:
