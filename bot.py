@@ -96,5 +96,5 @@ async def modifyuser(ctx, user: discord.User):
         logging.info(f"User {user.id} not found")
         return
     await ctx.response.send_modal(ModifyUserFieldView(title="Modify User", user=person))
-
+print (conn.discord_key)
 bot.run(conn.discord_key)

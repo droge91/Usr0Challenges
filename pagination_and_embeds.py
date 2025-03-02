@@ -59,7 +59,7 @@ def genPaginStuff(activeChallenges, conn, test=False):
                     if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
                         currChallenge['image'] = f"{category}/{title}/{file}"
                         Images[i].append(f"{category}/{title}/{file}")
-                    elif not file.endswith(".py") and not file == 'pycache':
+                    elif not file.endswith(".py") and not file == '__pycache__':
                         if not conn.checkS3(f"{category}/{title}/{file}"):
                             conn.uploadS3(f"{category}/{title}/{file}")
                         fileLinks.append(f"https://challfiles.s3.us-east-2.amazonaws.com/{category}/{title}/{file}")
