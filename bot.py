@@ -1,229 +1,56 @@
-import os
 import discord
-from dotenv import load_dotenv
-from pymongo import MongoClient
-from bson.objectid import ObjectId
-import importlib
-#Requires a .env
-try:
-    load_dotenv()
-    MONGODB_URI = os.environ['MONGODB_URI']
-    Discord_Key = os.environ['Discord_Key']
+import logging
+from modals_and_views import SelectChallengeView, TestSelectChallengeView, ModifyUserFieldView
+from botExternals import Connections
+from pagination_and_embeds import genPaginStuff, fileListAssembler
 
-    client = MongoClient(MONGODB_URI)
-except Exception as e:
-    print(f'MongoDB connection failed: {e}')
-    exit(1)
-print("Connected to MongoDB")
-users = client['Usr0Comp']['Users']
-challenges = client['Usr0Comp']['Challenges']
-print("Connected to the Users and Challenges collections")
+# Configure logging
+logging.basicConfig(filename='bot.log',level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+conn = Connections()
 bot = discord.Bot()
-
-
-
-#Class defining the Submission Modal
-class SubmitField(discord.ui.Modal):
-    def __init__(self, *args, **kwargs) -> None:
-        self.challenge = kwargs.pop("challenge")
-        super().__init__(*args, **kwargs)
-        for question in self.challenge['questions']:
-            #Necessary due to hard limit on the length of the label
-            try:
-                self.add_item(discord.ui.InputText(label=question, placeholder="Answer"))
-            except Exception as e:
-                self.add_item(discord.ui.InputText(label=question[:42] + '...', placeholder="Answer"))
-
-
-    async def callback(self, interaction: discord.Interaction):
-        currChallenge = self.challenge
-        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
-        title = currChallenge['title'].replace(" ", "_")
-        person = users.find_one({"user_id": interaction.user.id})
-        if person is not None and currChallenge['challNum'] in person['solves']:
-            await interaction.response.send_message("You have already solved this challenge", ephemeral=True)
-            return
-        correct = True
-        wrongquestions = []
-        complex = currChallenge.get('Complex_Answer')
-        for i in range(len(self.children)):
-            submission = self.children[i].value
-            if complex and currChallenge['Complex_Answer'] == i:
-                if os.path.exists(f"{category}/{title}/validate_{i}.py"):
-                    module = importlib.import_module(f"{category}.{title}.validate_{i}")
-                    validate = module.validate
-                    if not validate(submission):
-                        correct = False
-                        wrongquestions.append(i+1)
-                else:
-                    await interaction.response.send_message("Complex answer required but not setup properly, contact Officer", ephemeral=True)
-            else:
-                if submission.lower() != currChallenge['answers'][i].lower():
-                    correct = False
-                    wrongquestions.append(i+1)
-        if correct:
-            points = pointsCalc(person, currChallenge)
-            if person is None:
-                users.insert_one({"user_id": interaction.user.id, "points": points, "solves": [currChallenge['challNum']], "attempts": 1})
-            else:
-                users.update_one({"user_id": interaction.user.id}, {"$set": {"points": person['points'] + points, "solves": person['solves'] + [currChallenge['challNum']], "attempts": person['attempts'] + 1}})       
-            await interaction.response.send_message(f"Correct Answer! You have been awarded {points} points", ephemeral=True)
-        else:
-            wrongstring = ', '.join([str(i) for i in wrongquestions])
-            if wrongquestions == 1:
-                await interaction.response.send_message(f"Question {wrongstring} is incorrect", ephemeral=True)
-            else:
-                await interaction.response.send_message(f"Questions {wrongstring} are incorrect", ephemeral=True)
-            
-
-def pointsCalc(person, currChallenge):
-    updated_challenge = challenges.find_one_and_update(
-        {"title": currChallenge['title']},
-        {'$inc': {'solves': 1}},
-        return_document=True 
-)
-    points = int(updated_challenge['points']) - int(updated_challenge['solves'] - 1) * 5
-
-    if points < 10:
-        points = 10
-    return points
-
-
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    logging.info(f"Logged in as {bot.user}")
 
-
-catSlang = {"Open Source Intelligence" : "OSI", "Enumeration & Exploitation" : "E&E"}
-
-
-
-class Paginator(discord.ui.View):
-    def __init__(self, **kwargs):
-        self.challenge = kwargs.pop("challenge")
-        super().__init__(timeout=None)
-        self.embeds = kwargs.pop("embeds")
-        self.files = kwargs.pop("files")
-        self.current_page = kwargs.pop("current_page")
-        self.views = kwargs.pop("views")
-
-        self.previous_page.disabled = True if self.current_page == 0 else False
-        self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
-
-    @discord.ui.button(label="Previous", style=discord.ButtonStyle.blurple, disabled=True)
-    async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Go to the previous page."""
-        self.message = await interaction.response.edit_message(
-            embed=self.embeds[self.current_page - 1],
-            files=fileListAssembler(self.files[self.current_page - 1]) if self.files else None,
-            view=self.views[self.current_page - 1]
-        )
-
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
-    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
-        """Go to the next page."""
-        self.message = await interaction.response.edit_message(
-            embed=self.embeds[self.current_page + 1],
-            files=fileListAssembler(self.files[self.current_page + 1]) if self.files else None,
-            view=self.views[self.current_page + 1]
-        )
-
-    @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
-    async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
-        await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge))
-
-
-
+# Command opens test challenges
 @bot.command(description="Test the bot")
 async def test(ctx):
-    activeChallenges = (challenges.find({"Testactive": True})).sort("points", 1)
+    logging.info("Test command invoked")
+    activeChallenges = (conn.challenges.find({"Testactive": True})).sort("points", 1)
     if activeChallenges is None:
         await ctx.response.send_message("No active challenges", ephemeral=True)
+        logging.info("No active challenges found for test")
         return
-    embeds = [None] * activeChallenges.collection.count_documents({"Testactive": True})
-    Images = []
-    views = []
-    for i, currChallenge in enumerate(activeChallenges):
-        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
-        title = currChallenge['title'].replace(" ", "_")
-        Images.append([])
-        fileLinks = []
-        if os.path.exists(f"{category}/{title}"):
-            for file in os.listdir(f"{category}/{title}"):
-                if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
-                    currChallenge['image'] = f"{category}/{title}/{file}"
-                    Images[i].append(f"{category}/{title}/{file}")
-                elif not file.endswith(".py"):
-                    fileLinks.append(f"<https://github.com/droge91/Usr0ChallengeFiles/blob/main/{category}/{title}/{file}?raw=true>")
-        if 'image' not in currChallenge:
-            currChallenge['image'] = ""
-        embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"Testactive": True}))
-        embeds[i] = embed
-        views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge))
 
+    embeds, Images, views = genPaginStuff(activeChallenges, conn, test=True)
+    await ctx.response.send_message(embed=embeds[0], view=views[0], files=fileListAssembler(Images[0]), ephemeral=True)
 
-    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
 
 @bot.command(description="Start the bot")
 async def start(ctx):
-    activeChallenges = (challenges.find({"active": True})).sort("points", 1)
+    logging.info("Start command invoked")
+    activeChallenges = (conn.challenges.find({"active": True})).sort("points", 1)
     if activeChallenges is None:
         await ctx.response.send_message("No active challenges", ephemeral=True)
+        logging.info("No active challenges found for start")
         return
-    embeds = [None] * activeChallenges.collection.count_documents({"active": True})
-    Images = []
-    views = []
-    for i, currChallenge in enumerate(activeChallenges):
-        category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
-        title = currChallenge['title'].replace(" ", "_")
-        Images.append([])
-        fileLinks = []
-        if os.path.exists(f"{category}/{title}"):
-            for file in os.listdir(f"{category}/{title}"):
-                if file.endswith(".png") or file.endswith(".jpg") or file.endswith(".jpeg"):
-                    currChallenge['image'] = f"{category}/{title}/{file}"
-                    Images[i].append(f"{category}/{title}/{file}")
-                elif not file.endswith(".py"):
-                    fileLinks.append(f"https://github.com/droge91/Usr0ChallengeFiles/blob/main/{category}/{title}/{file}?raw=true")
-        if 'image' not in currChallenge:
-            currChallenge['image'] = ""
-        embed = assembleEmbed(currChallenge, fileLinks, i+1, activeChallenges.collection.count_documents({"active": True}))
-        embeds[i] = embed
-        views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge))
 
+    embeds, Images, views = genPaginStuff(activeChallenges, conn)
+    await ctx.response.send_message(embed=embeds[0], view=views[0], files=fileListAssembler(Images[0]), ephemeral=True)
 
-    await ctx.response.send_message(embed=embeds[0], view=views[0], files = fileListAssembler(Images[0]), ephemeral=True)
-
-
-def fileListAssembler(files):
-    return list(discord.File(file) for file in files)
-
-def assembleEmbed(challenge, fileLinks, iter,tot):
-    hyperlinks = "\n".join([f"[{file.split('/')[-1].split('?')[0]}]({file})" for file in fileLinks])
-    questions = "\n".join([f"{i+1}. {question}" for i, question in enumerate(challenge['questions'])])
-
-    embed = discord.Embed(
-        title=f"{challenge['title']} - {challenge['points']} points",
-        description=challenge['desc'] + f"\n{hyperlinks}" + f"\n\n{questions}",
-        color=discord.Colour.blurple(),
-    )
-
-    embed.set_author(name= f"{challenge['category']}        {iter}/{tot}")
-    embed.set_thumbnail(url=challenge['categoryIcon'])
-    if challenge['image'] != "":
-        embed.set_image(url=f"attachment://{challenge['image'].split('/')[-1]}")
-    return embed
-
+# Command to show challenge standings
 @bot.command(description="Show the current Standings")
 async def standings(ctx):
+    logging.info("Standings command invoked")
     embed = discord.Embed(title="Standings", color=0x00ff00)
-    top5 = users.find().sort([("points", -1), ("attempst", 1)]).limit(5)
+    top5 = conn.users.find().sort([("points", -1), ("attempts", 1)]).limit(5)
 
-    user = users.find_one({"user_id": ctx.author.id})
+    user = conn.users.find_one({"user_id": ctx.author.id})
     if user is None:
         user = {"user_id": ctx.author.id, "points": 0, "solves": [], "attempts": 0}
-        users.insert_one(user)
+        conn.mongo.users.insert_one(user)
 
     leaderboard = ""
     top_5_ids = []
@@ -242,117 +69,32 @@ async def standings(ctx):
         embed.add_field(name="Your Current Placement", value=userplace, inline=True)
     await ctx.response.send_message(embed=embed, ephemeral=True)
 
-
+# Changes current active challenges
 @bot.command(description="Change which challenges are active")
 async def changeactive(ctx):
+    logging.info("Change active challenges command invoked")
     global challenges
-    challenges = client['Usr0Comp']['Challenges']
-    await ctx.response.send_message("Select the challenges you want to be active", view=SelectChallengeView(), ephemeral=True)
+    challenges = conn.mongo['Usr0Comp']['Challenges']
+    await ctx.response.send_message("Select the challenges you want to be active", view=SelectChallengeView(conn=conn), ephemeral=True)
 
-class SelectChallengeView(discord.ui.View):
-    @discord.ui.select(
-        placeholder="Select the active challenges",
-        min_values=1,
-        max_values= challenges.count_documents({}),
-        options=
-        [
-            discord.SelectOption(label=doc["title"], value=str(doc["_id"]))
-            for doc in challenges.find()
-        ]
-    )
-
-    async def callback(self, select, interaction: discord.Interaction):
-        selected = select.values
-        challenges.update_many({}, {"$set": {"active": False}})
-        for challenge in selected:
-            challenges.update_one({"_id": ObjectId(challenge)}, {"$set": {"active": True}})
-        await interaction.response.send_message("Challenges have been updated", ephemeral=True)
-
+# Command to change the testing active challenges
 @bot.command(description="Change which challenges are active for testing")
 async def changetestactive(ctx):
+    logging.info("Change test active challenges command invoked")
     global challenges
-    challenges = client['Usr0Comp']['Challenges']
-    await ctx.response.send_message("Select the challenges you want to be Testing active", view=TestSelectChallengeView(), ephemeral=True)
-
-class TestSelectChallengeView(discord.ui.View):
-    @discord.ui.select(
-        placeholder="Select the active challenges",
-        min_values=1,
-        max_values= challenges.count_documents({}),
-        options=
-        [
-            discord.SelectOption(label=doc["title"], value=str(doc["_id"]))
-            for doc in challenges.find()
-        ]
-    )
-
-    async def callback(self, select, interaction: discord.Interaction):
-        selected = select.values
-        challenges.update_many({}, {"$set": {"Testactive": False}})
-        for challenge in selected:
-            challenges.update_one({"_id": ObjectId(challenge)}, {"$set": {"Testactive": True}})
-        await interaction.response.send_message("Challenges have been updated", ephemeral=True)
-
-class ModifyChallengeView(discord.ui.View):
-    @discord.ui.select(
-        placeholder="Select the challenge you want to modify",
-        min_values=1,
-        max_values= 1,
-        options=
-        [
-            discord.SelectOption(label=doc["title"], value=str(doc["_id"]))
-            for doc in challenges.find()
-        ]
-    )
-
-    async def callback(self, select, interaction: discord.Interaction):
-        selected = select.values
-        for challenge in selected:
-            currChallenge = challenges.find_one({"_id": ObjectId(challenge)})
-            await interaction.response.send_modal(ModifyFieldView(title="Modify Challenge", challenge=currChallenge))
-
-class ModifyFieldView(discord.ui.Modal):
-    def __init__(self, *args, **kwargs) -> None:
-        self.challenge = kwargs.pop("challenge")
-        super().__init__(*args, **kwargs)
-        excluded = ["_id", "active", "categoryIcon", "image", "challNum", "links", "category", "desc"]
-        for key in self.challenge.keys():
-            if key not in excluded:
-                self.add_item(discord.ui.InputText(label=key, value=self.challenge[key]))
-
-    async def callback(self, interaction: discord.Interaction):
-        for child in self.children:
-            if child.label == "points" or child.label == "solves":
-                challenges.update_one({"_id": self.challenge["_id"]}, {"$set": {child.label: int(child.value)}})
-            else:
-                challenges.update_one({"_id": self.challenge["_id"]}, {"$set": {child.label: child.value}})
-        await interaction.response.send_message("Challenge has been updated", ephemeral=True)
-
-@bot.command(description="Modify a challenge")
-async def modify(ctx):
-    global challenges
-    challenges = client['Usr0Comp']['Challenges']
-    await ctx.response.send_message("Select the challenge you want to modify", view=ModifyChallengeView(), ephemeral=True)
+    challenges = conn.mongo['Usr0Comp']['Challenges']
+    await ctx.response.send_message("Select the challenges you want to be Testing active", view=TestSelectChallengeView(conn=conn), ephemeral=True)
 
 
+# Command to modify a user
 @bot.command(description="Modify a User")
 async def modifyuser(ctx, user: discord.User):
-    person = users.find_one({"user_id": user.id})
+    logging.info(f"Modify user command invoked for user {user.id}")
+    person = conn.mongo.users.find_one({"user_id": user.id})
     if person is None:
         await ctx.response.send_message("User not found", ephemeral=True)
+        logging.info(f"User {user.id} not found")
         return
     await ctx.response.send_modal(ModifyUserFieldView(title="Modify User", user=person))
 
-class ModifyUserFieldView(discord.ui.Modal):
-    def __init__(self, *args, **kwargs) -> None:
-        self.user = kwargs.pop("user")
-        super().__init__(*args, **kwargs)
-        excluded = ["_id", "user_id", "solves"]
-        for key in self.user.keys():
-            if key not in excluded:
-                self.add_item(discord.ui.InputText(label=key, value=self.user[key]))
-    async def callback(self, interaction: discord.Interaction):
-        for child in self.children:
-                users.update_one({"user_id": self.user["user_id"]}, {"$set": {child.label: child.value}})
-        await interaction.response.send_message("User has been updated", ephemeral=True)
-bot.run(Discord_Key)
+bot.run(conn.discord_key)
