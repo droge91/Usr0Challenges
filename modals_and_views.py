@@ -2,7 +2,7 @@ import discord
 import os
 import importlib
 from bson.objectid import ObjectId
-
+import pagination_and_embeds
 #Dictionary to convert the category names to slang
 catSlang = {"Open Source Intelligence" : "OSI", "Enumeration & Exploitation" : "E&E"}
 
@@ -11,6 +11,7 @@ class SubmitField(discord.ui.Modal):
     def __init__(self, *args, **kwargs) -> None:
         self.challenge = kwargs.pop("challenge")
         self.conn = kwargs.pop("conn")
+        self.prac = kwargs.pop("prac")
         super().__init__(*args, **kwargs)
         for question in self.challenge['questions']:
             #Necessary due to hard limit on the length of the label
@@ -47,7 +48,7 @@ class SubmitField(discord.ui.Modal):
                     correct = False
                     wrongquestions.append(i+1)
         if correct:
-            points = self.pointsCalc(person, currChallenge)
+            points = self.pointsCalc(person, currChallenge) if not self.prac else 0
             if person is None:
                 self.conn.users.insert_one({"user_id": interaction.user.id, "points": points, "solves": [currChallenge['challNum']], "attempts": 1})
             else:
@@ -98,6 +99,28 @@ class SelectChallengeView(discord.ui.View):
         for challenge in selected:
             self.conn.challenges.update_one({"_id": ObjectId(challenge)}, {"$set": {"active": True}})
         await interaction.response.send_message("Challenges have been updated", ephemeral=True)
+
+class PracticeCatSelectView(discord.ui.View):
+    def __init__(self, *args, **kwargs) -> None:
+        self.conn = kwargs.pop("conn")
+        super().__init__(*args, **kwargs)
+        self.select = discord.ui.Select(
+            placeholder="Select the category you want to practice",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=cat, value=cat)
+                for cat in self.conn.challenges.distinct("category")
+            ]
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        selected = self.select.values
+        practiceChallenges = (self.conn.challenges.find({"category": selected[0]})).sort("challNum")
+        embeds, Images, views = pagination_and_embeds.genPaginStuff(practiceChallenges, self.conn, practice=True)
+        await interaction.response.send_message(embed=embeds[0], view=views[0], files=pagination_and_embeds.fileListAssembler(Images[0]), ephemeral=True)
 
 #Class for the changetestactive selection
 class TestSelectChallengeView(discord.ui.View):

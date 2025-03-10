@@ -1,6 +1,6 @@
 import discord
 import logging
-from modals_and_views import SelectChallengeView, TestSelectChallengeView, ModifyUserFieldView
+from modals_and_views import SelectChallengeView, TestSelectChallengeView, ModifyUserFieldView, PracticeCatSelectView
 from botExternals import Connections
 from pagination_and_embeds import genPaginStuff, fileListAssembler
 
@@ -39,6 +39,12 @@ async def start(ctx):
 
     embeds, Images, views = genPaginStuff(activeChallenges, conn)
     await ctx.response.send_message(embed=embeds[0], view=views[0], files=fileListAssembler(Images[0]), ephemeral=True)
+
+
+@bot.command(description="Pull of previous challenges for practice")
+async def practice(ctx):
+    logging.info("Practice command invoked")
+    await ctx.response.send_message("Select the category you want to practice", view=PracticeCatSelectView(conn=conn), ephemeral=True)
 
 # Command to show challenge standings
 @bot.command(description="Show the current Standings")

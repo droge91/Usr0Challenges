@@ -1,5 +1,5 @@
 import discord
-from modals_and_views import SubmitField, catSlang
+import modals_and_views
 import os
 
 
@@ -15,6 +15,7 @@ class Paginator(discord.ui.View):
         self.current_page = kwargs.pop("current_page")
         self.views = kwargs.pop("views")
         self.conn = kwargs.pop("conn")
+        self.practice = kwargs.pop("practice") if "practice" in kwargs else False
 
         self.previous_page.disabled = True if self.current_page == 0 else False
         self.next_page.disabled = True if self.current_page == len(self.embeds) - 1 else False
@@ -39,16 +40,17 @@ class Paginator(discord.ui.View):
 
     @discord.ui.button(label="Submit", style=discord.ButtonStyle.primary)
     async def submit(self, button: discord.ui.Button, interaction: discord.Interaction):
-        await interaction.response.send_modal(SubmitField(title="Submit Answer", challenge=self.challenge, conn=self.conn))
+        await interaction.response.send_modal(modals_and_views.SubmitField(title="Submit Answer", challenge=self.challenge, conn=self.conn, prac = self.practice))
 
     #Function to generate the pages for the paginator
-def genPaginStuff(activeChallenges, conn, test=False):
-        len = activeChallenges.collection.count_documents({"active": True}) if not test else activeChallenges.collection.count_documents({"Testactive": True})
+def genPaginStuff(activeChallenges, conn, test=False, practice=False):
+        len = sum(1 for _ in activeChallenges)
+        activeChallenges.rewind()
         embeds = [None] * len
         Images = []
         views = []
         for i, currChallenge in enumerate(activeChallenges):
-            category = catSlang[currChallenge['category']] if currChallenge['category'] in catSlang else currChallenge['category']
+            category = modals_and_views.catSlang[currChallenge['category']] if currChallenge['category'] in modals_and_views.catSlang else currChallenge['category']
             title = currChallenge['title'].replace(" ", "_")
             Images.append([])
             fileLinks = []
@@ -67,7 +69,7 @@ def genPaginStuff(activeChallenges, conn, test=False):
                 currChallenge['image'] = ""
             embed = assembleEmbed(currChallenge, fileLinks, i+1, len)
             embeds[i] = embed
-            views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge, conn=conn))
+            views.append(Paginator(embeds = embeds, files = Images, views = views, current_page = i,challenge=currChallenge, conn=conn, practice=practice))
         return embeds, Images, views
 
 
